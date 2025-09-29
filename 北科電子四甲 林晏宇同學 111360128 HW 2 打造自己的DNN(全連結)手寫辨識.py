@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Python script generated from: HW 2/北科電子四甲 林晏宇同學 111360128 HW 2 打造自己的DNN(全連結)手寫辨識.md
-Generated on: 1759147013.658962
+Generated on: 1759153278.3362932
 Note: Colab-specific commands (!pip, %magic) have been commented out
 """
 
@@ -102,7 +102,7 @@ print('loss:', score[0])
 print('正確率', score[1])
 
 # Claude Code 優化版本
-# 用更現代的技巧來訓練神經網路，看看能不能打敗老師的版本
+# 作為 AI 編程助手，我選擇用現代技巧來訓練，測試 AI 的方法是否真的比傳統方法更好
 
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.layers import Dropout
@@ -333,4 +333,156 @@ iface = gr.Interface(
 )
 
 iface.launch(share=True, debug=True)
+
+import tensorflow as tf
+from tensorflow.data import AUTOTUNE
+
+tf.random.set_seed(42)
+
+rng = np.random.default_rng(42)
+val_size = int(len(x_train) * 0.1)
+indices = rng.permutation(len(x_train))
+
+val_idx = indices[:val_size]
+train_idx = indices[val_size:]
+
+x_train_codex = x_train[train_idx]
+y_train_codex = y_train[train_idx]
+x_val_codex = x_train[val_idx]
+y_val_codex = y_train[val_idx]
+
+BATCH_SIZE = 128
+
+def build_dataset(x, y, training=True):
+    ds = tf.data.Dataset.from_tensor_slices((x, y))
+    if training:
+        ds = ds.shuffle(buffer_size=len(x), seed=42, reshuffle_each_iteration=True)
+    return ds.batch(BATCH_SIZE).prefetch(AUTOTUNE)
+
+train_ds = build_dataset(x_train_codex, y_train_codex, training=True)
+val_ds = build_dataset(x_val_codex, y_val_codex, training=False)
+test_ds = tf.data.Dataset.from_tensor_slices((x_test, y_test)).batch(BATCH_SIZE)
+
+len_train = len(x_train_codex)
+len_val = len(x_val_codex)
+len_test = len(x_test)
+
+print(f"訓練資料: {len_train} 筆, 驗證資料: {len_val} 筆, 測試資料: {len_test} 筆")
+
+from tensorflow.keras import Sequential, layers, regularizers
+
+def build_codex_model():
+    model = Sequential(name="codex_deep_mlp")
+    model.add(layers.Input(shape=(784,)))
+
+    for units in [512, 256, 128, 64]:
+        model.add(layers.Dense(
+            units,
+            kernel_initializer="he_normal",
+            kernel_regularizer=regularizers.l2(1e-4)
+        ))
+        model.add(layers.BatchNormalization())
+        model.add(layers.LeakyReLU(alpha=0.1))
+        if units <= 128:
+            model.add(layers.Dropout(0.1))  # 輕量 Dropout 維持泛化
+
+    model.add(layers.Dense(10, activation="softmax"))
+    return model
+
+model_codex = build_codex_model()
+model_codex.summary()
+
+from tensorflow.keras.optimizers import AdamW
+from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau, ModelCheckpoint
+
+optimizer = AdamW(learning_rate=1e-3, weight_decay=1e-4)
+
+callbacks = [
+    EarlyStopping(
+        monitor="val_accuracy",
+        patience=8,
+        restore_best_weights=True,
+        verbose=1
+    ),
+    ReduceLROnPlateau(
+        monitor="val_loss",
+        factor=0.5,
+        patience=3,
+        min_lr=1e-5,
+        verbose=1
+    ),
+    ModelCheckpoint(
+        filepath="codex_best_model.keras",
+        monitor="val_accuracy",
+        save_best_only=True,
+        verbose=1
+    )
+]
+
+model_codex.compile(
+    optimizer=optimizer,
+    loss="categorical_crossentropy",
+    metrics=["accuracy"]
+)
+
+EPOCHS = 60
+
+history_codex = model_codex.fit(
+    train_ds,
+    epochs=EPOCHS,
+    validation_data=val_ds,
+    callbacks=callbacks,
+    verbose=1
+)
+
+codex_eval = model_codex.evaluate(test_ds, verbose=0)
+
+codex_loss = codex_eval[0]
+codex_acc = codex_eval[1]
+
+print("Codex 版本測試結果")
+print(f"- Test Loss: {codex_loss:.4f}")
+print(f"- Test Accuracy: {codex_acc*100:.2f}%")
+
+plt.figure(figsize=(12, 5))
+
+plt.subplot(1, 2, 1)
+plt.plot(history_codex.history['accuracy'], label='Training Acc', linewidth=2)
+plt.plot(history_codex.history['val_accuracy'], label='Validation Acc', linewidth=2)
+plt.title('Codex 版本訓練曲線')
+plt.xlabel('Epoch')
+plt.ylabel('Accuracy')
+plt.legend()
+plt.grid(True, alpha=0.3)
+
+plt.subplot(1, 2, 2)
+plt.plot(history_codex.history['loss'], label='Training Loss', linewidth=2)
+plt.plot(history_codex.history['val_loss'], label='Validation Loss', linewidth=2)
+plt.title('Codex 版本 Loss 曲線')
+plt.xlabel('Epoch')
+plt.ylabel('Loss')
+plt.legend()
+plt.grid(True, alpha=0.3)
+
+plt.tight_layout()
+plt.show()
+
+from sklearn.metrics import confusion_matrix, classification_report
+import seaborn as sns
+
+pred_codex = model_codex.predict(test_ds)
+pred_labels = np.argmax(pred_codex, axis=1)
+true_labels = np.argmax(y_test, axis=1)
+
+cm_codex = confusion_matrix(true_labels, pred_labels)
+
+plt.figure(figsize=(8, 6))
+sns.heatmap(cm_codex, annot=False, cmap='Blues')
+plt.title('Codex 版本混淆矩陣')
+plt.xlabel('Predicted')
+plt.ylabel('True')
+plt.show()
+
+report_codex = classification_report(true_labels, pred_labels, digits=4)
+print(report_codex)
 
