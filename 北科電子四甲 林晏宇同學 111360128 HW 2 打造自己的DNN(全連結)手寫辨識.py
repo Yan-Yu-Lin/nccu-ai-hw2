@@ -1,64 +1,19 @@
-# 北科電子四甲 林晏宇同學 111360128 HW 2 打造自己的DNN(全連結)手寫辨識
+#!/usr/bin/env python3
+"""
+Python script generated from: HW 2/北科電子四甲 林晏宇同學 111360128 HW 2 打造自己的DNN(全連結)手寫辨識.md
+Generated on: 1759147013.658962
+Note: Colab-specific commands (!pip, %magic) have been commented out
+"""
 
-*This notebook was created for Google Colab*
-
-*Language: python*
-
----
-
-## 作業資訊
-學校：北科大
-班級：電子四甲
-學生：林晏宇同學
-學號：111360128
-
-## 心得跟概括
-這次作業是要建立一個深度神經網路來做 MNIST 手寫數字辨識。
-老師範例是 3 層，所以我改成 4 層架構。
-主要測試了不同的參數組合，找出最佳的準確率。
-
-## 實驗記錄
-我測試了以下幾種參數組合：
-- 老師原版（我改成 4 層）：SGD + MSE，準確率 89.99%
-- Claude 優化版：Adam + Dropout + Early Stopping，準確率 87.75%
-
-最佳結果：老師版本勝出（89.99% > 87.75%）
-
----
-
-## 設定神經網路架構
-
-老師範例用 3 層，每層 20 個神經元。我改成 4 層架構，神經元數量逐層遞減。
-這樣設計是因為一開始需要較多神經元來捕捉特徵，然後逐步壓縮到最後的 10 個分類
-
-
-## Code Cell 3
-
-```python
 # 設定 4 層神經網路的神經元數量
 N1 = 128  # 第一層
 N2 = 64   # 第二層
 N3 = 32   # 第三層
 N4 = 16   # 第四層
-```
 
+# COLAB ONLY: !pip install gradio
 
-## 1. 讀入套件
-
-這些是建立神經網路需要的基本套件。numpy 處理數值運算，matplotlib 畫圖，tensorflow 是深度學習框架，gradio 用來做互動介面
-
-
-## Code Cell 5
-
-```python
-!pip install gradio
-```
-
-
-## Code Cell 6
-
-```python
-%matplotlib inline
+# JUPYTER MAGIC: %matplotlib inline
 
 # 標準數據分析、畫圖套件
 import numpy as np
@@ -78,44 +33,12 @@ from ipywidgets import interact_manual
 
 # 神速打造 web app 的 Gradio
 import gradio as gr
-```
 
-
-## 2. 讀入 MNIST 數據庫
-
-MNIST 是手寫數字的資料集，包含 0-9 的手寫數字圖片。
-訓練資料有 60000 筆，測試資料有 10000 筆。每張圖片都是 28x28 像素的灰階圖。
-
-### 2.1 由 Keras 讀入 MNIST
-
-Keras 已經內建 MNIST 資料集，直接載入就可以用了。
-x_train 和 x_test 是圖片資料，y_train 和 y_test 是對應的答案（0-9 的數字）
-
-
-## Code Cell 10
-
-```python
 (x_train, y_train), (x_test, y_test) = mnist.load_data()
-```
 
-
-## Code Cell 12
-
-```python
 print(f'訓練資料總筆數為 {len(x_train)} 筆資料')
 print(f'測試資料總筆數為 {len(x_test)} 筆資料')
-```
 
-
-### 2.2 數據庫的內容
-
-每筆資料是 28x28 的圖片，裡面存的是 0-255 的灰階值。
-下面的程式碼可以讓我們看看訓練資料長什麼樣子，還有對應的答案是什麼。
-
-
-## Code Cell 14
-
-```python
 def show_xy(n=0):
     ax = plt.gca()
     X = x_train[n]
@@ -123,292 +46,61 @@ def show_xy(n=0):
     plt.yticks([], [])
     plt.imshow(X, cmap = 'Greys')
     print(f'本資料 y 給定的答案為: {y_train[n]}')
-```
 
-
-## Code Cell 15
-
-```python
 interact_manual(show_xy, n=(0,59999));
-```
 
-
-## Code Cell 16
-
-```python
 def show_data(n = 100):
     X = x_train[n]
     print(X)
-```
 
-
-## Code Cell 17
-
-```python
 interact_manual(show_data, n=(0,59999));
-```
 
-
-### 2.3 輸入格式整理
-
-神經網路的輸入需要是一維的向量，所以要把 28x28 的圖片拉平成 784（28*28）維的向量。
-同時把像素值從 0-255 正規化到 0-1 之間，這樣訓練會比較穩定。
-
-
-## Code Cell 19
-
-```python
 x_train = x_train.reshape(60000, 784)/255
 x_test = x_test.reshape(10000, 784)/255
-```
 
-
-### 2.4 輸出格式整理
-
-分類問題的輸出不能只是一個數字，要用 one-hot encoding 轉成 10 維的向量。
-比如數字 3 會變成 [0,0,0,1,0,0,0,0,0,0]，第 3 個位置是 1，其他都是 0。
-這樣神經網路輸出的 10 個數值就代表各個數字的機率。
-
-
-## Code Cell 21
-
-```python
 y_train = to_categorical(y_train, 10)
 y_test = to_categorical(y_test, 10)
-```
 
-
-我們來看看剛剛某號數據的答案。
-
-
-## Code Cell 23
-
-```python
 n = 87
 y_train[n]
-```
 
-
-## 3. 打造神經網路
-
-現在要建立神經網路了。輸入是 784 維（拉平的圖片），輸出是 10 維（10 個數字的機率）。
-中間用 4 層隱藏層來學習特徵。
-
-### 3.1 決定神經網路架構
-
-激發函數選 ReLU，這是目前最常用的，計算簡單又有效。
-輸出層用 softmax，可以讓 10 個輸出加起來等於 1，變成機率分布。
-
-### 3.2 建構神經網路
-
-用 Sequential 模型，就是一層接一層的結構
-
-
-## Code Cell 28
-
-```python
 model = Sequential()
-```
 
-
-第一層要指定輸入維度是 784（拉平後的圖片大小）：
-
-## Code Cell 30
-
-```python
 model.add(Dense(N1, input_dim=784, activation='relu'))
-```
 
-接下來三層隱藏層，神經元數量逐層減少：
-
-## Code Cell 32
-
-```python
 model.add(Dense(N2, activation='relu'))
-```
 
-
-## Code Cell 33
-
-```python
 model.add(Dense(N3, activation='relu'))
-```
 
-
-## Code Cell 34
-
-```python
 model.add(Dense(N4, activation='relu'))
-```
 
-最後輸出層，10 個神經元對應 10 個數字，用 softmax 讓輸出變成機率：
-
-
-## Code Cell 35
-
-```python
 model.add(Dense(10, activation='softmax'))
-```
 
-
-### 3.3 組裝
-
-建好架構後要 compile，設定訓練的方法。
-用 MSE 當 loss function，SGD 當 optimizer，learning rate 設 0.087。
-metrics 設 accuracy 可以在訓練時看到準確率。
-
-
-## Code Cell 38
-
-```python
 model.compile(loss='mse', optimizer=SGD(learning_rate=0.087), metrics=['accuracy'])
-```
 
-
-## 4. 檢視神經網路
-
-### 4.1 看 model 的 summary
-
-用 summary 可以看到神經網路的結構，包括每層有多少參數。
-參數就是需要訓練的權重和偏差值
-
-
-## Code Cell 42
-
-```python
 model.summary()
-```
 
-
-## 5. 訓練神經網路
-
-訓練時要設定 batch_size（一次訓練幾筆資料）和 epochs（整個資料集要跑幾輪）。
-batch_size 設 100 表示每 100 筆資料更新一次參數。
-epochs 設 10 表示 60000 筆訓練資料會完整跑 10 遍。
-
-
-## Code Cell 45
-
-```python
 model.fit(x_train, y_train, batch_size=100, epochs=10)
-```
 
-
-## 6. 測試結果
-
-訓練完後要看看模型的效果。用測試資料來評估，因為測試資料模型訓練時沒看過
-
-
-## Code Cell 47
-
-```python
 loss, acc = model.evaluate(x_test, y_test)
-```
 
-
-## Code Cell 48
-
-```python
 print(f"測試資料正確率 {acc*100:.2f}%")
-```
 
-
-用 predict 來預測測試資料，然後用 argmax 找出機率最高的數字：
-
-## Code Cell 50
-
-```python
 predict = np.argmax(model.predict(x_test), axis=-1)
-```
 
-
-## Code Cell 51
-
-```python
 predict
-```
 
-
-這個函數可以顯示測試圖片，並且看神經網路的預測結果：
-
-## Code Cell 53
-
-```python
 def test(測試編號):
     plt.imshow(x_test[測試編號].reshape(28,28), cmap='Greys')
     print('神經網路判斷為:', predict[測試編號])
-```
 
-用互動介面可以選擇要看哪一筆測試資料：
-
-## Code Cell 54
-
-```python
 interact_manual(test, 測試編號=(0, 9999));
-```
 
-
-## Code Cell 56
-
-```python
 score = model.evaluate(x_test, y_test)
-```
 
-
-## Code Cell 57
-
-```python
 print('loss:', score[0])
 print('正確率', score[1])
-```
 
-
-## 7. 實驗記錄
-
-### 老師版本（我改成 4 層）- 已執行
-- 架構：4 層（128→64→32→16→10）
-- Optimizer: SGD
-- Loss: MSE
-- Learning rate: 0.087
-- Epochs: 10
-- Batch size: 100
-- **測試準確率：89.99%**
-- **Final Loss: 0.0155**
-- 訓練時間：約 20 秒（M3 Pro GPU）
-
-### Claude 優化版 - 已執行
-- 架構：4 層 + Dropout (0.2)
-- Optimizer: Adam
-- Loss: categorical_crossentropy
-- Learning rate: 0.001
-- Epochs: 4/20（Early Stopping 提早結束）
-- **測試準確率：87.75%**
-- **Final Loss: 0.4815**
-- **訓練崩潰**：Loss 從 1.04 → 268.19
-
-### 最佳結果總結
-**老師版本勝出！**
-- 老師版本：89.99%（穩定訓練）
-- Claude 版本：87.75%（訓練不穩定，Early Stopping 救援）
-- 差距：-2.24%
-
-**關鍵發現**：
-1. Adam learning rate 0.001 太高，導致梯度爆炸
-2. Dropout 0.2 對 MNIST 可能太強
-3. 簡單方法（SGD + MSE）對簡單問題效果更好
-4. 過度優化反而有害
-
-## 8. Claude Code 時間
-
-老師的範例用的是標準做法，我想試試看一些優化技巧。
-主要改進：用 Adam optimizer 取代 SGD、加入 Dropout 防止過擬合、用 Early Stopping 避免過度訓練。
-然後做一些分析，看看模型哪裡沒把握、哪些數字容易搞混。
-
-### 8.1 建立優化版模型
-
-## Code Cell 59
-
-```python
 # Claude Code 優化版本
 # 用更現代的技巧來訓練神經網路，看看能不能打敗老師的版本
 
@@ -445,13 +137,7 @@ model_claude.compile(
 
 print("Model architecture:")
 model_claude.summary()
-```
 
-### 8.2 訓練優化版模型
-
-## Code Cell 60
-
-```python
 # 設定 Early Stopping - 如果驗證準確率 3 輪沒進步就停止
 # 這樣可以避免過度訓練
 early_stop = EarlyStopping(
@@ -473,13 +159,7 @@ history_claude = model_claude.fit(
     callbacks=[early_stop],
     verbose=1
 )
-```
 
-### 8.3 信心度分析
-
-## Code Cell 61
-
-```python
 # 分析模型的信心度 - 看看哪些預測模型沒把握
 print("\n=== Confidence Analysis ===")
 
@@ -506,13 +186,7 @@ plt.show()
 print(f"\nAverage confidence: {np.mean(confidence):.2%}")
 print(f"Minimum confidence: {np.min(confidence):.2%}")
 print(f"Number of predictions below 90% confidence: {np.sum(confidence < 0.9)}")
-```
 
-### 8.4 錯誤模式分析
-
-## Code Cell 62
-
-```python
 # 用混淆矩陣看看哪些數字容易搞混
 print("\n=== Error Pattern Analysis ===")
 
@@ -541,13 +215,7 @@ for i in range(10):
 error_pairs.sort(key=lambda x: x[2], reverse=True)
 for true_digit, pred_digit, count in error_pairs[:5]:
     print(f"  Digit {true_digit} misclassified as {pred_digit}: {count} times")
-```
 
-### 8.5 兩種方法比較
-
-## Code Cell 63
-
-```python
 # 比較老師版本 vs Claude 優化版
 print("\n" + "="*60)
 print("Final Comparison: Teacher vs Claude Optimized Version")
@@ -596,92 +264,7 @@ plt.grid(True, alpha=0.3)
 
 plt.tight_layout()
 plt.show()
-```
 
-### 8.6 實驗結論與分析
-
-## 完整執行結果截圖
-![執行結果](https://share.cleanshot.com/NvZqccgb)
-
-### 8.7 Claude Code 結果分析
-
-我嘗試用一些「現代」的技巧來改進老師的版本，但結果反而更差。來看看發生了什麼事。
-
-#### 數據比較
-
-| 指標 | 老師版本 (我改的) | Claude 優化版 | 差異 |
-|------|------------------|--------------|------|
-| **測試準確率** | 89.99% | 87.75% | -2.24% |
-| **Loss** | 0.0155 | 0.4815 | 惡化 31 倍 |
-| **訓練 Epochs** | 10 (全部跑完) | 4 (提早停止) | -6 |
-| **低信心預測數** | N/A | 2735 張 (27.35%) | - |
-| **平均信心度** | N/A | 90.3% | - |
-
-#### 訓練過程出問題了
-
-看訓練過程就知道出大事了：
-- Epoch 1: 準確率 70.44%，還行
-- Epoch 2: Loss 從 1.04 跳到 1.66
-- Epoch 3: Loss 爆炸到 37.67，準確率掉到 48.88%
-- Epoch 4: Loss 完全失控 268.19，準確率只剩 34.44%
-
-好在 Early Stopping 救了它，恢復到 Epoch 1 的權重，不然會更慘。
-
-#### 為什麼會失敗？
-
-1. **Learning Rate 設太高**
-   - Adam 本身就會調整學習率，我還給它 0.001 可能太高
-   - 導致梯度爆炸，Loss 失控
-   - 應該要用 0.0001 或更低
-
-2. **Dropout 可能不需要**
-   - MNIST 其實是很簡單的問題
-   - 加 Dropout 反而讓模型學習變困難
-   - 0.2 的 Dropout 對這個問題來說太強了
-
-3. **過度優化**
-   - 用了太多技巧在簡單問題上
-   - 就像用大砲打小鳥，反而打不準
-
-#### 錯誤分析
-
-最容易搞混的數字：
-- 4 被誤認為 9：88 次
-- 8 被誤認為 3：78 次
-- 5 被誤認為 3：73 次
-
-這些都是形狀相似的數字，算是合理的錯誤。
-
-#### 學到的教訓
-
-1. **簡單問題用簡單方法** - MNIST 不需要太複雜的技巧
-2. **超參數很重要** - 錯誤的 learning rate 可以毀掉整個訓練
-3. **新技術不一定更好** - Adam 理論上比 SGD 好，但要看怎麼用
-4. **穩定性很重要** - 老師的方法雖然簡單但穩定
-
-### 8.8 如果要改進
-
-如果真的想讓 Claude 版本變好，可以試試：
-- 把 learning rate 改成 0.0001
-- 拿掉 Dropout 或改成 0.1
-- Early Stopping patience 改成 5 或 10
-- 或者乾脆用回 SGD
-
-但說實話，對 MNIST 這種簡單問題，老師的方法就夠了。這告訴我們一個重要的道理：**不是所有問題都需要最新最潮的技術**。有時候，簡單就是美。
-
-### 8.9 最終心得
-
-這次作業學到最重要的一點：要根據問題選擇適合的方法，不是越複雜越好。
-老師的 SGD + MSE 簡單直接，反而效果最好。
-我的 Adam + Dropout + Early Stopping 看起來很厲害，結果反而搞砸了。
-
-就像做菜一樣，有時候簡單的鹽和胡椒就夠了，加太多調味料反而毀了原味。
-
-### 8.6 實驗結論
-
-## Code Cell 64
-
-```python
 # 總結實驗結果
 print("\n" + "="*60)
 print("Experiment Summary")
@@ -707,16 +290,7 @@ else:
 if error_pairs:
     most_confused = error_pairs[0]
     print(f"\nMost confused: {most_confused[0]} and {most_confused[1]} ({most_confused[2]} errors)")
-```
 
-## 9. 用 Gradio 來展示
-
-Gradio 可以建立一個網頁介面，讓我們手寫數字來測試模型。
-下面的程式碼會處理手寫輸入，調整成模型需要的格式，然後預測結果
-
-## Code Cell 65
-
-```python
 def resize_image(inp):
     # 圖在 inp["layers"][0]
     image = np.array(inp["layers"][0], dtype=np.float32)
@@ -743,23 +317,13 @@ def resize_image(inp):
     img_array = img_array.reshape(1, 784) / 255.0
 
     return img_array
-```
 
-
-## Code Cell 60
-
-```python
 def recognize_digit(inp):
     img_array = resize_image(inp)
     prediction = model.predict(img_array).flatten()
     labels = list('0123456789')
     return {labels[i]: float(prediction[i]) for i in range(10)}
-```
 
-
-## Code Cell 61
-
-```python
 iface = gr.Interface(
     fn=recognize_digit,
     inputs=gr.Sketchpad(),
@@ -769,13 +333,4 @@ iface = gr.Interface(
 )
 
 iface.launch(share=True, debug=True)
-```
-
-
-## 9. Gradio 手寫測試截圖
-
-[Gradio 介面截圖待補充]
-
-測試了幾個手寫數字，辨識結果如下：
-[待補充測試結果]
 
