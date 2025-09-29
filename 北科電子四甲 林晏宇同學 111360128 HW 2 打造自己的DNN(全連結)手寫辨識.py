@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Python script generated from: HW 2/北科電子四甲 林晏宇同學 111360128 HW 2 打造自己的DNN(全連結)手寫辨識.md
-Generated on: 1759153278.3362932
+Generated on: 1759154012.4969165
 Note: Colab-specific commands (!pip, %magic) have been commented out
 """
 
