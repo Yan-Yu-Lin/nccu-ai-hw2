@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Python script generated from: HW 2/北科電子四甲 林晏宇同學 111360128 HW 2 打造自己的DNN(全連結)手寫辨識.md
-Generated on: 1759155326.5795543
+Generated on: 1759158146.0458143
 Note: Colab-specific commands (!pip, %magic) have been commented out
 """
 
@@ -291,49 +291,6 @@ if error_pairs:
     most_confused = error_pairs[0]
     print(f"\nMost confused: {most_confused[0]} and {most_confused[1]} ({most_confused[2]} errors)")
 
-def resize_image(inp):
-    # 圖在 inp["layers"][0]
-    image = np.array(inp["layers"][0], dtype=np.float32)
-    image = image.astype(np.uint8)
-
-    # 轉成 PIL 格式
-    image_pil = Image.fromarray(image)
-
-    # Alpha 通道設為白色, 再把圖從 RGBA 轉成 RGB
-    background = Image.new("RGB", image_pil.size, (255, 255, 255))
-    background.paste(image_pil, mask=image_pil.split()[3]) # 把圖片粘貼到白色背景上，使用透明通道作為遮罩
-    image_pil = background
-
-    # 轉換為灰階圖像
-    image_gray = image_pil.convert("L")
-
-    # 將灰階圖像縮放到 28x28, 轉回 numpy array
-    img_array = np.array(image_gray.resize((28, 28), resample=Image.LANCZOS))
-
-    # 配合 MNIST 數據集
-    img_array = 255 - img_array
-
-    # 拉平並縮放
-    img_array = img_array.reshape(1, 784) / 255.0
-
-    return img_array
-
-def recognize_digit(inp):
-    img_array = resize_image(inp)
-    prediction = model.predict(img_array).flatten()
-    labels = list('0123456789')
-    return {labels[i]: float(prediction[i]) for i in range(10)}
-
-iface = gr.Interface(
-    fn=recognize_digit,
-    inputs=gr.Sketchpad(),
-    outputs=gr.Label(num_top_classes=3),
-    title="MNIST 手寫辨識",
-    description="請在畫板上繪製數字"
-)
-
-iface.launch(share=True, debug=True)
-
 import tensorflow as tf
 from tensorflow.data import AUTOTUNE
 
@@ -485,4 +442,88 @@ plt.show()
 
 report_codex = classification_report(true_labels, pred_labels, digits=4)
 print(report_codex)
+
+def resize_image(inp):
+    # 圖在 inp["layers"][0]
+    image = np.array(inp["layers"][0], dtype=np.float32)
+    image = image.astype(np.uint8)
+
+    # 轉成 PIL 格式
+    image_pil = Image.fromarray(image)
+
+    # Alpha 通道設為白色, 再把圖從 RGBA 轉成 RGB
+    background = Image.new("RGB", image_pil.size, (255, 255, 255))
+    background.paste(image_pil, mask=image_pil.split()[3]) # 把圖片粘貼到白色背景上，使用透明通道作為遮罩
+    image_pil = background
+
+    # 轉換為灰階圖像
+    image_gray = image_pil.convert("L")
+
+    # 將灰階圖像縮放到 28x28, 轉回 numpy array
+    img_array = np.array(image_gray.resize((28, 28), resample=Image.LANCZOS))
+
+    # 配合 MNIST 數據集
+    img_array = 255 - img_array
+
+    # 拉平並縮放
+    img_array = img_array.reshape(1, 784) / 255.0
+
+    return img_array
+
+# 老師版本的辨識函數
+def recognize_digit_teacher(inp):
+    img_array = resize_image(inp)
+    prediction = model.predict(img_array).flatten()
+    labels = list('0123456789')
+    return {labels[i]: float(prediction[i]) for i in range(10)}
+
+# Claude 版本的辨識函數
+def recognize_digit_claude(inp):
+    img_array = resize_image(inp)
+    prediction = model_claude.predict(img_array).flatten()
+    labels = list('0123456789')
+    return {labels[i]: float(prediction[i]) for i in range(10)}
+
+# 載入 Codex 模型（只載入一次，避免重複載入）
+model_codex_loaded = tf.keras.models.load_model("codex_best_model.keras")
+
+# Codex 版本的辨識函數
+def recognize_digit_codex(inp):
+    img_array = resize_image(inp)
+    prediction = model_codex_loaded.predict(img_array).flatten()
+    labels = list('0123456789')
+    return {labels[i]: float(prediction[i]) for i in range(10)}
+
+# 創建三個不同的介面
+iface_teacher = gr.Interface(
+    fn=recognize_digit_teacher,
+    inputs=gr.Sketchpad(),
+    outputs=gr.Label(num_top_classes=3),
+    title="MNIST 手寫辨識 - 老師版本 (89.99%)",
+    description="請在畫板上繪製數字 | 使用 SGD + MSE 訓練"
+)
+
+iface_claude = gr.Interface(
+    fn=recognize_digit_claude,
+    inputs=gr.Sketchpad(),
+    outputs=gr.Label(num_top_classes=3),
+    title="MNIST 手寫辨識 - Claude 版本 (87.75%)",
+    description="請在畫板上繪製數字 | 使用 Adam + Dropout 訓練"
+)
+
+iface_codex = gr.Interface(
+    fn=recognize_digit_codex,
+    inputs=gr.Sketchpad(),
+    outputs=gr.Label(num_top_classes=3),
+    title="MNIST 手寫辨識 - Codex 版本 (97.78%)",
+    description="請在畫板上繪製數字 | 使用 AdamW + BatchNorm 訓練"
+)
+
+# 使用 TabbedInterface 將三個介面整合在一起
+demo = gr.TabbedInterface(
+    [iface_teacher, iface_claude, iface_codex],
+    ["老師版本", "Claude Code", "Codex CLI"]
+)
+
+demo.launch(share=True, debug=True)
 
